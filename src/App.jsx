@@ -481,6 +481,8 @@ const DataManagement = () => {
   const [selectedChallenge, setSelectedChallenge] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
   const [exportMode, setExportMode] = useState('current'); // 'current' or 'all'
+  const [sortBy, setSortBy] = useState('newest'); // 'newest', 'oldest', 'challenge', 'group'
+  const [filterByLength, setFilterByLength] = useState('all'); // 'all', 'short', 'medium', 'long'
 
   // フィルタリング用のオプション
   const uniqueChallenges = useMemo(() => {
@@ -493,7 +495,7 @@ const DataManagement = () => {
 
   // フィルタリング済みのソリューション
   const filteredSolutions = useMemo(() => {
-    return solutions.filter(solution => {
+    let filtered = solutions.filter(solution => {
       const matchesSearch = searchTerm === '' || 
         solution.challenge.toLowerCase().includes(searchTerm.toLowerCase()) ||
         solution.groupName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -503,9 +505,36 @@ const DataManagement = () => {
       const matchesChallenge = selectedChallenge === '' || solution.challenge === selectedChallenge;
       const matchesGroup = selectedGroup === '' || solution.groupName === selectedGroup;
       
-      return matchesSearch && matchesChallenge && matchesGroup;
+      // 文字数フィルター
+      let matchesLength = true;
+      if (filterByLength !== 'all') {
+        const solutionLength = solution.solution.length;
+        if (filterByLength === 'short') matchesLength = solutionLength < 300;
+        else if (filterByLength === 'medium') matchesLength = solutionLength >= 300 && solutionLength < 800;
+        else if (filterByLength === 'long') matchesLength = solutionLength >= 800;
+      }
+      
+      return matchesSearch && matchesChallenge && matchesGroup && matchesLength;
     });
-  }, [solutions, searchTerm, selectedChallenge, selectedGroup]);
+
+    // ソート処理
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'newest':
+          return new Date(b.timestamp) - new Date(a.timestamp);
+        case 'oldest':
+          return new Date(a.timestamp) - new Date(b.timestamp);
+        case 'challenge':
+          return a.challenge.localeCompare(b.challenge);
+        case 'group':
+          return a.groupName.localeCompare(b.groupName);
+        default:
+          return 0;
+      }
+    });
+
+    return filtered;
+  }, [solutions, searchTerm, selectedChallenge, selectedGroup, filterByLength, sortBy]);
 
   // CSV出力機能（改善版）
   const exportToCSV = useCallback(() => {
@@ -592,6 +621,8 @@ const DataManagement = () => {
     setSearchTerm('');
     setSelectedChallenge('');
     setSelectedGroup('');
+    setFilterByLength('all');
+    setSortBy('newest');
   }, []);
 
   return (
@@ -611,7 +642,7 @@ const DataManagement = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               キーワード検索
@@ -654,6 +685,38 @@ const DataManagement = () => {
               {uniqueGroups.map(group => (
                 <option key={group} value={group}>{group}</option>
               ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              文字数でフィルター
+            </label>
+            <select
+              value={filterByLength}
+              onChange={(e) => setFilterByLength(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="all">すべて</option>
+              <option value="short">短い（300文字未満）</option>
+              <option value="medium">中（300-800文字）</option>
+              <option value="long">長い（800文字以上）</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              並び替え
+            </label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="newest">新しい順</option>
+              <option value="oldest">古い順</option>
+              <option value="challenge">課題名順</option>
+              <option value="group">グループ名順</option>
             </select>
           </div>
         </div>
@@ -700,8 +763,15 @@ const DataManagement = () => {
 
       {/* データ一覧 */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100">
+        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h3 className="text-lg font-medium text-gray-900">アイデア一覧</h3>
+          <div className="text-sm text-gray-500">
+            {filteredSolutions.length > 0 && (
+              <>
+                表示中: {filteredSolutions.length}件 / 全{solutions.length}件
+              </>
+            )}
+          </div>
         </div>
         
         <div className="overflow-x-auto">
