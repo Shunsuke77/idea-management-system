@@ -993,7 +993,7 @@ const SolutionManagementSystem = () => {
                 </svg>
               </div>
               <div className="flex items-center justify-center space-x-3 mb-4">
-                <span className="text-4xl font-bold text-gray-900">alumnote</span>
+                <span className="text-4xl font-bold text-gray-900">Alumnote</span>
               </div>
               <h1 className="text-5xl font-bold text-gray-900 mb-2">
                 Idea Campus
@@ -1062,7 +1062,7 @@ const SolutionManagementSystem = () => {
           
           {/* フッター */}
           <div className="mt-12 text-center text-sm text-gray-500">
-            powered by alumnote
+            powered by Alumnote
           </div>
         </div>
       </div>
