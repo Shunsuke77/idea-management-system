@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, createContext, useContext, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, createContext, useContext, useRef } from 'react';
 import { Plus, Trophy, Users, Lightbulb, Monitor, PenTool, ArrowLeft, Zap, Settings, Eye, EyeOff, Database, Download, Search, Filter } from 'lucide-react';
 
 // 🌍 グローバル状態管理（課題管理と学生入力を分離）
@@ -15,9 +15,63 @@ const AppProvider = ({ children }) => {
     'スマートシティの実現', '国際協力の推進'
   ];
 
+  // ワークショップ管理（メモリ内で管理）
+  const [workshops, setWorkshops] = useState({});
+  const [currentWorkshopId, setCurrentWorkshopId] = useState(null);
+
+  // 現在のワークショップのデータを取得
+  const currentWorkshop = currentWorkshopId ? workshops[currentWorkshopId] : null;
+  
   const [solutions, setSolutions] = useState([]);
   const [activeChallenges, setActiveChallenges] = useState([]);
   const [customChallenges, setCustomChallenges] = useState([]);
+
+  // ワークショップの作成
+  const createWorkshop = useCallback((name) => {
+    const id = `ws_${Date.now()}`;
+    const newWorkshop = {
+      id,
+      name,
+      createdAt: new Date().toISOString(),
+      solutions: [],
+      activeChallenges: [],
+      customChallenges: []
+    };
+    
+    setWorkshops(prev => ({ ...prev, [id]: newWorkshop }));
+    setCurrentWorkshopId(id);
+    setSolutions([]);
+    setActiveChallenges([]);
+    setCustomChallenges([]);
+    
+    return id;
+  }, []);
+
+  // ワークショップの切り替え
+  const switchWorkshop = useCallback((workshopId) => {
+    const workshop = workshops[workshopId];
+    if (workshop) {
+      setCurrentWorkshopId(workshopId);
+      setSolutions(workshop.solutions || []);
+      setActiveChallenges(workshop.activeChallenges || []);
+      setCustomChallenges(workshop.customChallenges || []);
+    }
+  }, [workshops]);
+
+  // データの保存（ワークショップごと）
+  useEffect(() => {
+    if (currentWorkshopId && workshops[currentWorkshopId]) {
+      setWorkshops(prev => ({
+        ...prev,
+        [currentWorkshopId]: {
+          ...prev[currentWorkshopId],
+          solutions,
+          activeChallenges,
+          customChallenges
+        }
+      }));
+    }
+  }, [solutions, activeChallenges, customChallenges, currentWorkshopId]);
 
   // 📊 安定した課題リスト（参照固定）
   const stableChallengeList = useMemo(() => {
@@ -40,9 +94,16 @@ const AppProvider = ({ children }) => {
       setCustomChallenges,
       allChallenges,
       stableChallengeList,
-      stableActiveChallenges
+      stableActiveChallenges,
+      workshops,
+      setWorkshops,
+      currentWorkshopId,
+      setCurrentWorkshopId,
+      currentWorkshop,
+      createWorkshop,
+      switchWorkshop
     }),
-    [solutions, activeChallenges, customChallenges, stableChallengeList, stableActiveChallenges]
+    [solutions, activeChallenges, customChallenges, stableChallengeList, stableActiveChallenges, workshops, currentWorkshopId, currentWorkshop, createWorkshop, switchWorkshop]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -213,7 +274,7 @@ const StableSelect = ({ label, value, onChange, options, placeholder, required =
 
 // 🎓 学生フォームコンポーネント（完全分離）
 const StudentForm = () => {
-  const { stableActiveChallenges, setSolutions } = useAppContext();
+  const { stableActiveChallenges, setSolutions, currentWorkshop } = useAppContext();
   
   const [formData, setFormData] = useState({
     challenge: '',
@@ -223,6 +284,21 @@ const StudentForm = () => {
     why: '',
     how: ''
   });
+
+  // ワークショップが選択されていない場合
+  if (!currentWorkshop) {
+    return (
+      <div className="p-8 bg-red-50 border border-red-200 rounded-2xl text-center">
+        <div className="w-16 h-16 bg-red-100 rounded-full mx-auto mb-4 flex items-center justify-center">
+          <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-medium text-red-900 mb-2">ワークショップが開始されていません</h3>
+        <p className="text-red-700">管理者がワークショップを開始するまでお待ちください。</p>
+      </div>
+    );
+  }
 
   const handleChallengeChange = useCallback((e) => {
     const newValue = e.target.value;
@@ -298,6 +374,13 @@ const StudentForm = () => {
 
   return (
     <div className="space-y-6">
+      {/* 現在のワークショップ情報 */}
+      <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+        <p className="text-blue-800 text-sm">
+          <strong>現在のワークショップ:</strong> {currentWorkshop.name}
+        </p>
+      </div>
+
       {stableActiveChallenges.length === 0 ? (
         <div className="p-6 bg-yellow-50 border border-yellow-200 rounded-2xl text-center">
           <p className="text-yellow-800">管理者が課題を設定していません</p>
@@ -393,10 +476,11 @@ const StudentForm = () => {
 
 // 📊 データ管理コンポーネント
 const DataManagement = () => {
-  const { solutions } = useAppContext();
+  const { solutions, workshops, currentWorkshopId } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedChallenge, setSelectedChallenge] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
+  const [exportMode, setExportMode] = useState('current'); // 'current' or 'all'
 
   // フィルタリング用のオプション
   const uniqueChallenges = useMemo(() => {
@@ -423,17 +507,41 @@ const DataManagement = () => {
     });
   }, [solutions, searchTerm, selectedChallenge, selectedGroup]);
 
-  // CSV出力機能
+  // CSV出力機能（改善版）
   const exportToCSV = useCallback(() => {
-    if (filteredSolutions.length === 0) {
+    let dataToExport = [];
+    let filename = '';
+
+    if (exportMode === 'current') {
+      // 現在のワークショップのみ
+      dataToExport = filteredSolutions;
+      const workshopName = workshops[currentWorkshopId]?.name || 'データ';
+      filename = `${workshopName}_${new Date().toISOString().split('T')[0]}.csv`;
+    } else {
+      // 全ワークショップ
+      Object.entries(workshops).forEach(([wsId, workshop]) => {
+        workshop.solutions.forEach(solution => {
+          dataToExport.push({
+            ...solution,
+            workshopName: workshop.name
+          });
+        });
+      });
+      filename = `全ワークショップ_${new Date().toISOString().split('T')[0]}.csv`;
+    }
+
+    if (dataToExport.length === 0) {
       alert('エクスポートするデータがありません');
       return;
     }
 
-    const headers = ['投稿日時', '課題', 'グループ名', 'お名前', 'What（どんな課題か）', 'Why（なぜ重要か）', 'How（どう解決するか）'];
+    const headers = exportMode === 'all' 
+      ? ['ワークショップ名', '投稿日時', '課題', 'グループ名', 'お名前', 'What（どんな課題か）', 'Why（なぜ重要か）', 'How（どう解決するか）']
+      : ['投稿日時', '課題', 'グループ名', 'お名前', 'What（どんな課題か）', 'Why（なぜ重要か）', 'How（どう解決するか）'];
+    
     const csvContent = [
       headers.join(','),
-      ...filteredSolutions.map(solution => {
+      ...dataToExport.map(solution => {
         // ソリューションテキストを解析してWhat/Why/Howを抽出
         const whatMatch = solution.solution.match(/【What（どんな課題か）】\n([\s\S]*?)\n\n【Why/);
         const whyMatch = solution.solution.match(/【Why（なぜ重要か）】\n([\s\S]*?)\n\n【How/);
@@ -443,15 +551,28 @@ const DataManagement = () => {
         const why = whyMatch ? whyMatch[1].trim() : '';
         const how = howMatch ? howMatch[1].trim() : '';
 
-        return [
-          `"${solution.timestamp}"`,
-          `"${solution.challenge}"`,
-          `"${solution.groupName}"`,
-          `"${solution.studentName}"`,
-          `"${what.replace(/"/g, '""')}"`,
-          `"${why.replace(/"/g, '""')}"`,
-          `"${how.replace(/"/g, '""')}"`
-        ].join(',');
+        const row = exportMode === 'all' 
+          ? [
+              `"${solution.workshopName || ''}"`,
+              `"${solution.timestamp}"`,
+              `"${solution.challenge}"`,
+              `"${solution.groupName}"`,
+              `"${solution.studentName}"`,
+              `"${what.replace(/"/g, '""')}"`,
+              `"${why.replace(/"/g, '""')}"`,
+              `"${how.replace(/"/g, '""')}"`
+            ]
+          : [
+              `"${solution.timestamp}"`,
+              `"${solution.challenge}"`,
+              `"${solution.groupName}"`,
+              `"${solution.studentName}"`,
+              `"${what.replace(/"/g, '""')}"`,
+              `"${why.replace(/"/g, '""')}"`,
+              `"${how.replace(/"/g, '""')}"`
+            ];
+        
+        return row.join(',');
       })
     ].join('\n');
 
@@ -459,12 +580,12 @@ const DataManagement = () => {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `アイデア一覧_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', filename);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [filteredSolutions]);
+  }, [filteredSolutions, workshops, currentWorkshopId, exportMode]);
 
   // フィルタリセット
   const resetFilters = useCallback(() => {
@@ -556,14 +677,24 @@ const DataManagement = () => {
             </div>
           </div>
           
-          <button
-            onClick={exportToCSV}
-            disabled={filteredSolutions.length === 0}
-            className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
-          >
-            <Download className="w-4 h-4" />
-            <span>CSV出力</span>
-          </button>
+          <div className="flex items-center space-x-4">
+            <select
+              value={exportMode}
+              onChange={(e) => setExportMode(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              <option value="current">現在のWSのみ</option>
+              <option value="all">全WS</option>
+            </select>
+            <button
+              onClick={exportToCSV}
+              disabled={exportMode === 'current' ? filteredSolutions.length === 0 : Object.keys(workshops).length === 0}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg transition-colors flex items-center space-x-2"
+            >
+              <Download className="w-4 h-4" />
+              <span>CSV出力</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -680,12 +811,13 @@ const DataManagement = () => {
 };
 
 const SolutionManagementSystem = () => {
-  const { solutions, activeChallenges, setActiveChallenges, customChallenges, setCustomChallenges, allChallenges } = useAppContext();
+  const { solutions, activeChallenges, setActiveChallenges, customChallenges, setCustomChallenges, allChallenges, workshops, setWorkshops, currentWorkshopId, setCurrentWorkshopId, currentWorkshop, createWorkshop, switchWorkshop, setSolutions } = useAppContext();
   
   const [currentView, setCurrentView] = useState('select');
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [newChallengeText, setNewChallengeText] = useState('');
-  const [adminSubView, setAdminSubView] = useState('challenges'); // 'challenges' or 'data'
+  const [adminSubView, setAdminSubView] = useState('workshop'); // 'workshop', 'challenges', or 'data'
+  const [newWorkshopName, setNewWorkshopName] = useState('');
 
   const getAllChallenges = useCallback(() => {
     return [...allChallenges, ...customChallenges];
@@ -694,7 +826,7 @@ const SolutionManagementSystem = () => {
   const handleAdminLogout = useCallback(() => {
     setIsAdminAuthenticated(false);
     setCurrentView('select');
-    setAdminSubView('challenges'); // 管理者画面のタブもリセット
+    setAdminSubView('workshop'); // 管理者画面のタブもリセット
   }, []);
 
   const toggleChallengeActive = useCallback((challenge) => {
@@ -727,6 +859,34 @@ const SolutionManagementSystem = () => {
     }
   }, [customChallenges, setCustomChallenges, setActiveChallenges]);
 
+  const handleCreateWorkshop = useCallback(() => {
+    if (newWorkshopName.trim()) {
+      createWorkshop(newWorkshopName.trim());
+      setNewWorkshopName('');
+      alert(`ワークショップ「${newWorkshopName}」を作成しました`);
+    } else {
+      alert('ワークショップ名を入力してください');
+    }
+  }, [newWorkshopName, createWorkshop]);
+
+  const deleteWorkshop = useCallback((workshopId) => {
+    if (window.confirm('このワークショップを削除してもよろしいですか？\nすべてのデータが失われます。')) {
+      setWorkshops(prev => {
+        const newWorkshops = { ...prev };
+        delete newWorkshops[workshopId];
+        return newWorkshops;
+      });
+      
+      // 削除したワークショップが現在選択中の場合
+      if (currentWorkshopId === workshopId) {
+        setCurrentWorkshopId(null);
+        setSolutions([]);
+        setActiveChallenges([]);
+        setCustomChallenges([]);
+      }
+    }
+  }, [currentWorkshopId]);
+
   const getChallengeStats = useCallback(() => {
     const stats = {};
     solutions.forEach(sol => {
@@ -752,30 +912,41 @@ const SolutionManagementSystem = () => {
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="max-w-md mx-auto px-8">
           <div className="text-center mb-12">
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-lg">
-              <Lightbulb className="w-10 h-10 text-white" />
+            {/* Alumnoteロゴとタイトル */}
+            <div className="mb-8 flex flex-col items-center">
+              <div className="w-24 h-24 mb-6 relative">
+                {/* Alumnoteの公式ロゴ */}
+                <svg viewBox="0 0 100 100" className="w-full h-full">
+                  <circle cx="50" cy="50" r="40" fill="#4f46e5" />
+                  <circle cx="50" cy="50" r="25" fill="white" />
+                  <circle cx="50" cy="50" r="15" fill="#4f46e5" />
+                </svg>
+              </div>
+              <div className="flex items-center justify-center space-x-3 mb-4">
+                <span className="text-4xl font-bold text-gray-900">alumnote</span>
+              </div>
+              <h1 className="text-5xl font-bold text-gray-900 mb-2">
+                Idea Campus
+              </h1>
+              <p className="text-lg text-gray-600 font-normal">
+                革新的なアイデアを生み出そう
+              </p>
             </div>
-            <h1 className="text-4xl font-light text-gray-900 mb-4 tracking-tight">
-              Ideas
-            </h1>
-            <p className="text-lg text-gray-500 font-light">
-              革新的なソリューションを生み出そう
-            </p>
           </div>
           
           <div className="space-y-4">
             <button
               onClick={() => setCurrentView('adminAuth')}
-              className="w-full bg-red-600 hover:bg-red-700 text-white py-6 px-8 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
+              className="w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white py-6 px-8 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-                    <Settings className="w-6 h-6" />
+                  <div className="w-12 h-12 bg-white/30 rounded-xl flex items-center justify-center">
+                    <Settings className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left">
                     <div className="text-xl font-medium">管理者</div>
-                    <div className="text-sm opacity-70 font-light">課題管理・データ管理</div>
+                    <div className="text-sm opacity-90 font-normal">ワークショップ・課題管理</div>
                   </div>
                 </div>
                 <ArrowLeft className="w-5 h-5 transform rotate-180" />
@@ -784,16 +955,16 @@ const SolutionManagementSystem = () => {
 
             <button
               onClick={() => setCurrentView('student')}
-              className="w-full bg-gray-900 hover:bg-gray-800 text-white py-6 px-8 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
+              className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-blue-600 hover:to-indigo-600 text-white py-6 px-8 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-                    <PenTool className="w-6 h-6" />
+                  <div className="w-12 h-12 bg-white/30 rounded-xl flex items-center justify-center">
+                    <PenTool className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left">
                     <div className="text-xl font-medium">学生</div>
-                    <div className="text-sm opacity-70 font-light">アイデアを投稿</div>
+                    <div className="text-sm opacity-90 font-normal">アイデアを投稿</div>
                   </div>
                 </div>
                 <ArrowLeft className="w-5 h-5 transform rotate-180" />
@@ -802,21 +973,26 @@ const SolutionManagementSystem = () => {
             
             <button
               onClick={() => setCurrentView('presenter')}
-              className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white py-6 px-8 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
+              className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-blue-600 hover:to-indigo-600 text-white py-6 px-8 rounded-2xl transition-all duration-300 transform hover:scale-[1.02] shadow-lg hover:shadow-xl"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center">
-                    <Monitor className="w-6 h-6" />
+                  <div className="w-12 h-12 bg-white/30 rounded-xl flex items-center justify-center">
+                    <Monitor className="w-6 h-6 text-white" />
                   </div>
                   <div className="text-left">
-                    <div className="text-xl font-medium">プレゼンター</div>
-                    <div className="text-sm opacity-80 font-light">リアルタイム表示</div>
+                    <div className="text-xl font-medium">ダッシュボード</div>
+                    <div className="text-sm opacity-90 font-normal">リアルタイム表示</div>
                   </div>
                 </div>
                 <ArrowLeft className="w-5 h-5 transform rotate-180" />
               </div>
             </button>
+          </div>
+          
+          {/* フッター */}
+          <div className="mt-12 text-center text-sm text-gray-500">
+            powered by alumnote
           </div>
         </div>
       </div>
@@ -866,10 +1042,23 @@ const SolutionManagementSystem = () => {
           <div className="max-w-6xl mx-auto px-8">
             <div className="flex space-x-8">
               <button
+                onClick={() => setAdminSubView('workshop')}
+                className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
+                  adminSubView === 'workshop'
+                    ? 'border-indigo-600 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4" />
+                  <span>ワークショップ管理</span>
+                </div>
+              </button>
+              <button
                 onClick={() => setAdminSubView('challenges')}
                 className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
                   adminSubView === 'challenges'
-                    ? 'border-blue-500 text-blue-600'
+                    ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -882,7 +1071,7 @@ const SolutionManagementSystem = () => {
                 onClick={() => setAdminSubView('data')}
                 className={`py-4 px-2 border-b-2 font-medium text-sm transition-colors ${
                   adminSubView === 'data'
-                    ? 'border-blue-500 text-blue-600'
+                    ? 'border-indigo-600 text-indigo-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -896,7 +1085,134 @@ const SolutionManagementSystem = () => {
         </div>
 
         <div className="max-w-6xl mx-auto px-8 py-12">
-          {adminSubView === 'challenges' ? (
+          {adminSubView === 'workshop' ? (
+            // ワークショップ管理タブ
+            <div>
+              <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 mb-8">
+                <div className="text-center mb-8">
+                  <h2 className="text-xl font-medium text-gray-900 mb-2">ワークショップ管理</h2>
+                  <p className="text-gray-500">
+                    {currentWorkshop ? (
+                      <>現在のワークショップ: <span className="font-medium text-indigo-600">{currentWorkshop.name}</span></>
+                    ) : (
+                      'ワークショップが選択されていません'
+                    )}
+                  </p>
+                </div>
+
+                {/* 新規ワークショップ作成 */}
+                <div className="mb-8">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">新しいワークショップを作成</h3>
+                  <div className="flex gap-4">
+                    <input
+                      type="text"
+                      value={newWorkshopName}
+                      onChange={(e) => setNewWorkshopName(e.target.value)}
+                      placeholder="例: 2024年春季ワークショップ"
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleCreateWorkshop();
+                        }
+                      }}
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-600 text-gray-900"
+                    />
+                    <button
+                      onClick={handleCreateWorkshop}
+                      className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors duration-200 flex items-center space-x-2"
+                    >
+                      <Plus className="w-5 h-5" />
+                      <span>作成</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* ワークショップ一覧 */}
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">ワークショップ一覧</h3>
+                  {Object.keys(workshops).length === 0 ? (
+                    <div className="text-center py-8 bg-gray-50 rounded-xl">
+                      <p className="text-gray-500">まだワークショップが作成されていません</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(workshops).map(([id, workshop]) => {
+                        const isActive = currentWorkshopId === id;
+                        return (
+                          <div
+                            key={id}
+                            className={`relative p-6 rounded-2xl border-2 transition-all duration-200 ${
+                              isActive 
+                                ? 'border-indigo-600 bg-indigo-50' 
+                                : 'border-gray-200 bg-white hover:border-gray-300'
+                            }`}
+                          >
+                            {!isActive && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  deleteWorkshop(id);
+                                }}
+                                className="absolute top-3 right-3 flex items-center justify-center w-8 h-8 rounded-full text-red-500 hover:bg-red-100 hover:text-red-700 transition-colors cursor-pointer"
+                                style={{ zIndex: 20 }}
+                                aria-label="ワークショップを削除"
+                              >
+                                <svg className="w-5 h-5 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            )}
+                            
+                            <div className="mb-4">
+                              <h4 className={`font-medium text-lg ${isActive ? 'text-indigo-600' : 'text-gray-900'}`}>
+                                {workshop.name}
+                              </h4>
+                              <p className="text-sm text-gray-500 mt-1">
+                                作成日: {new Date(workshop.createdAt).toLocaleDateString('ja-JP')}
+                              </p>
+                              {isActive && (
+                                <span className="inline-block mt-2 px-3 py-1 bg-indigo-600 text-white text-xs rounded-full">
+                                  現在選択中
+                                </span>
+                              )}
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-4 mb-4">
+                              <div className="text-center">
+                                <div className="text-2xl font-bold text-gray-900">{workshop.solutions.length}</div>
+                                <div className="text-xs text-gray-500">アイデア</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-2xl font-bold text-gray-900">{workshop.activeChallenges.length}</div>
+                                <div className="text-xs text-gray-500">課題</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-2xl font-bold text-gray-900">
+                                  {new Set(workshop.solutions.map(s => s.groupName)).size}
+                                </div>
+                                <div className="text-xs text-gray-500">グループ</div>
+                              </div>
+                            </div>
+                            
+                            {!isActive && (
+                              <button
+                                onClick={() => switchWorkshop(id)}
+                                className="relative w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors text-sm"
+                                style={{ zIndex: 10 }}
+                              >
+                                このワークショップを選択
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : adminSubView === 'challenges' ? (
             // 課題管理タブ
             <div>
               <div className="bg-white rounded-3xl p-8 shadow-sm border border-gray-100 mb-8">
@@ -1099,7 +1415,9 @@ const SolutionManagementSystem = () => {
                 <h1 className="text-3xl font-light tracking-tight">
                   Ideas Dashboard
                 </h1>
-                <p className="text-gray-400 font-light mt-1">リアルタイム</p>
+                <p className="text-gray-400 font-light mt-1">
+                  {currentWorkshop ? currentWorkshop.name : 'ワークショップ未選択'}
+                </p>
               </div>
               <div className="w-16"></div>
             </div>
