@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { SocketProvider } from './contexts/SocketContext';
+import { SocketProvider } from './contexts/SocketContext.jsx';
 import AppRoutes from './routes';
 
 function App() {
