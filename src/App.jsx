@@ -15,6 +15,9 @@ const AppProvider = ({ children }) => {
     'スマートシティの実現', '国際協力の推進'
   ];
 
+  // プレビューモードの状態管理を追加
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
   // ワークショップ管理（メモリ内で管理）
   const [workshops, setWorkshops] = useState({});
   const [currentWorkshopId, setCurrentWorkshopId] = useState(null);
@@ -101,9 +104,11 @@ const AppProvider = ({ children }) => {
       setCurrentWorkshopId,
       currentWorkshop,
       createWorkshop,
-      switchWorkshop
+      switchWorkshop,
+      isPreviewMode,
+      setIsPreviewMode
     }),
-    [solutions, activeChallenges, customChallenges, stableChallengeList, stableActiveChallenges, workshops, currentWorkshopId, currentWorkshop, createWorkshop, switchWorkshop]
+    [solutions, activeChallenges, customChallenges, stableChallengeList, stableActiveChallenges, workshops, currentWorkshopId, currentWorkshop, createWorkshop, switchWorkshop, isPreviewMode]
   );
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -976,7 +981,6 @@ const SolutionManagementSystem = () => {
       .sort((a, b) => b[1] - a[1]);
   }, [solutions]);
 
-  // 🏠 選択画面
   if (currentView === 'select') {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
@@ -1068,24 +1072,22 @@ const SolutionManagementSystem = () => {
       </div>
     );
   }
-
-  // 🔐 管理者認証画面
   if (currentView === 'adminAuth') {
     return (
-      <AdminAuth
-        onSuccess={() => {
-          setIsAdminAuthenticated(true);
-          setCurrentView('admin');
-        }}
-        onCancel={() => setCurrentView('select')}
-      />
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <AdminAuth
+          onSuccess={() => {
+            setIsAdminAuthenticated(true);
+            setCurrentView('admin');
+          }}
+          onCancel={() => setCurrentView('select')}
+        />
+      </div>
     );
   }
-
-  // 👑 管理者画面
   if (currentView === 'admin' && isAdminAuthenticated) {
     return (
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-900 text-white">
         <div className="bg-white border-b border-gray-100">
           <div className="max-w-6xl mx-auto px-8 py-6">
             <div className="flex items-center justify-between">
@@ -1418,10 +1420,9 @@ const SolutionManagementSystem = () => {
           )}
         </div>
       </div>
-    );
+    </div>
+  );
   }
-
-  // 🎓 学生画面
   if (currentView === 'student') {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -1463,8 +1464,6 @@ const SolutionManagementSystem = () => {
       </div>
     );
   }
-
-  // 📊 プレゼンター画面
   if (currentView === 'presenter') {
     const challengeStats = getChallengeStats();
     const groupStats = getGroupStats();
@@ -1693,17 +1692,83 @@ const SolutionManagementSystem = () => {
       </div>
     );
   }
-
   return null;
 };
 
 // 🌍 アプリケーションのルート
 const App = () => {
+  const { isPreviewMode, setIsPreviewMode } = useAppContext();
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showAdminAuth, setShowAdminAuth] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-semibold text-gray-900">
+                アイデア管理システム
+              </h1>
+            </div>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={() => setIsPreviewMode(!isPreviewMode)}
+                className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              >
+                {isPreviewMode ? (
+                  <>
+                    <EyeOff className="w-4 h-4 mr-2" />
+                    プレビュー終了
+                  </>
+                ) : (
+                  <>
+                    <Eye className="w-4 h-4 mr-2" />
+                    プレビュー
+                  </>
+                )}
+              </button>
+              {!isPreviewMode && (
+                <button
+                  onClick={() => setShowAdminAuth(true)}
+                  className="flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  管理者モード
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {showAdminAuth && (
+          <AdminAuth
+            onSuccess={() => {
+              setIsAdminMode(true);
+              setShowAdminAuth(false);
+            }}
+            onCancel={() => setShowAdminAuth(false)}
+          />
+        )}
+
+        {isAdminMode && !isPreviewMode ? (
+          <SolutionManagementSystem />
+        ) : (
+          <StudentForm />
+        )}
+      </main>
+    </div>
+  );
+};
+
+const AppWrapper = () => {
   return (
     <AppProvider>
-      <SolutionManagementSystem />
+      <App />
     </AppProvider>
   );
 };
 
-export default App;
+export default AppWrapper;
